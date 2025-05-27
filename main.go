@@ -8,6 +8,8 @@ import (
 	"unicode"
 )
 
+// readFile reads a file and returns its contents as a string
+// It handles file opening and reading, with error handling
 func readFile(filename string) string {
 	// Open the file
 	file, err := os.Open(filename)
@@ -25,40 +27,48 @@ func readFile(filename string) string {
 	return string(content)
 }
 
-// Token represents a lexical token
+// Token represents a lexical token in our JavaScript parser
+// Type is the token category (like "FUNCTION", "IDENTIFIER", etc.)
+// Value stores the actual text from the source code
 type Token struct {
 	Type  string
 	Value string
 }
 
-// Lexer breaks input into tokens
+// Lexer breaks input source code into tokens
+// It scans through the input character by character to identify tokens
 type Lexer struct {
-	input  string
-	pos    int
-	tokens []Token
+	input  string  // The full source code text being analyzed
+	pos    int     // Current position in the input (points to current character)
+	tokens []Token // Collection of tokens found so far
 }
 
-// NewLexer creates a new lexer
+// NewLexer creates a new lexer instance with the given input
+// This is a constructor function that initializes a lexer ready for tokenization
 func NewLexer(input string) *Lexer {
 	return &Lexer{
 		input:  input,
-		pos:    0,
-		tokens: []Token{},
+		pos:    0,         // Start at the beginning of input
+		tokens: []Token{}, // Empty token list
 	}
 }
 
-// Tokenize generates all tokens from the input
+// Tokenize processes the entire input and converts it to tokens
+// This is the main lexical analysis function that identifies all tokens in the source
 func (l *Lexer) Tokenize() []Token {
+	// Loop through the entire input
 	for l.pos < len(l.input) {
 		char := l.input[l.pos]
 
-		// Skip whitespace
+		// Skip whitespace (spaces, tabs, newlines)
+		// Whitespace generally has no semantic meaning in JavaScript
 		if unicode.IsSpace(rune(char)) {
 			l.pos++
 			continue
 		}
 
-		// Handle comments
+		// Handle single-line comments (// comment)
+		// Comments are preserved in our AST for documentation purposes
 		if char == '/' && l.pos+1 < len(l.input) && l.input[l.pos+1] == '/' {
 			// Skip to end of line
 			start := l.pos
@@ -70,37 +80,41 @@ func (l *Lexer) Tokenize() []Token {
 		}
 
 		// Handle identifiers and keywords
+		// Identifiers include variable names, function names, etc.
+		// Keywords are reserved words like 'function', 'return', etc.
 		if isAlpha(char) {
 			start := l.pos
+			// Collect all alphanumeric characters that form this identifier
 			for l.pos < len(l.input) && (isAlpha(l.input[l.pos]) || isDigit(l.input[l.pos])) {
 				l.pos++
 			}
 			value := l.input[start:l.pos]
 
-			// Check if it's a keyword
+			// Check if the identifier is actually a keyword
 			tokenType := "IDENTIFIER"
 			switch value {
 			case "function":
-				tokenType = "FUNCTION"
+				tokenType = "FUNCTION" // Function declaration keyword
 			case "return":
-				tokenType = "RETURN"
+				tokenType = "RETURN" // Return statement keyword
 			case "const":
-				tokenType = "CONST"
+				tokenType = "CONST" // Constant variable declaration
 			case "let":
-				tokenType = "LET"
+				tokenType = "LET" // Block-scoped variable declaration
 			case "var":
-				tokenType = "VAR"
+				tokenType = "VAR" // Function-scoped variable declaration
 			}
 
 			l.tokens = append(l.tokens, Token{Type: tokenType, Value: value})
 			continue
 		}
 
-		// Handle strings
+		// Handle string literals ("string" or 'string')
 		if char == '"' || char == '\'' {
 			quote := char
 			start := l.pos
 			l.pos++ // Skip the opening quote
+			// Continue until finding the matching closing quote
 			for l.pos < len(l.input) && l.input[l.pos] != quote {
 				l.pos++
 			}
@@ -109,7 +123,7 @@ func (l *Lexer) Tokenize() []Token {
 			continue
 		}
 
-		// Handle special characters
+		// Handle special characters and syntax elements
 		switch char {
 		case '(':
 			l.tokens = append(l.tokens, Token{Type: "LEFT_PAREN", Value: "("})
@@ -125,83 +139,104 @@ func (l *Lexer) Tokenize() []Token {
 			l.tokens = append(l.tokens, Token{Type: "EQUALS", Value: "="})
 		default:
 			// Skip unknown characters
+			// This simple parser ignores characters it doesn't recognize
 			l.pos++
 			continue
 		}
 		l.pos++
 	}
 
+	// Add an EOF (End Of File) token to indicate the end of input
 	l.tokens = append(l.tokens, Token{Type: "EOF", Value: ""})
 	return l.tokens
 }
 
+// isAlpha checks if a character is alphabetic or underscore
+// Used to determine the start of identifiers
 func isAlpha(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
 }
 
+// isDigit checks if a character is a numeric digit
+// Used for the non-first characters of identifiers
 func isDigit(c byte) bool {
 	return c >= '0' && c <= '9'
 }
 
-// AST node types
+// Node is an interface representing any node in our Abstract Syntax Tree
+// Every AST node type must implement the Type method
 type Node interface {
 	Type() string
 }
 
+// Program is the root node of our Abstract Syntax Tree
+// It contains all the top-level statements in the source file
 type Program struct {
-	Body []Node
+	Body []Node // Array of top-level statements
 }
 
 func (p *Program) Type() string {
 	return "Program"
 }
 
+// FunctionDeclaration represents a JavaScript function definition
+// Example: function name(param1, param2) { ... }
 type FunctionDeclaration struct {
-	Name   string
-	Params []string
-	Body   []Node
+	Name   string   // Function name
+	Params []string // Parameter names
+	Body   []Node   // Function body statements
 }
 
 func (f *FunctionDeclaration) Type() string {
 	return "FunctionDeclaration"
 }
 
+// ReturnStatement represents a 'return' statement in JavaScript
+// Example: return expression;
 type ReturnStatement struct {
-	Argument Node
+	Argument Node // The value being returned (can be nil)
 }
 
 func (r *ReturnStatement) Type() string {
 	return "ReturnStatement"
 }
 
+// Identifier represents a variable or function name
+// Examples: x, myFunction, etc.
 type Identifier struct {
-	Name string
+	Name string // The name of the identifier
 }
 
 func (i *Identifier) Type() string {
 	return "Identifier"
 }
 
+// StringLiteral represents a string value in the code
+// Examples: "hello", 'world'
 type StringLiteral struct {
-	Value string
+	Value string // The actual string value without quotes
 }
 
 func (s *StringLiteral) Type() string {
 	return "StringLiteral"
 }
 
+// VariableDeclaration represents a variable declaration
+// Examples: const x = 5; let name = "value";
 type VariableDeclaration struct {
-	Kind  string // const, let, var
-	Name  string
-	Value Node
+	Kind  string // Declaration type: "const", "let", or "var"
+	Name  string // Variable name
+	Value Node   // Initial value (can be nil)
 }
 
 func (v *VariableDeclaration) Type() string {
 	return "VariableDeclaration"
 }
 
+// Comment represents a code comment
+// Example: // This is a comment
 type Comment struct {
-	Text string
+	Text string // The full text of the comment including //
 }
 
 func (c *Comment) Type() string {
@@ -209,11 +244,13 @@ func (c *Comment) Type() string {
 }
 
 // Parser generates an AST from tokens
+// It implements a recursive descent parser pattern
 type Parser struct {
-	tokens []Token
-	pos    int
+	tokens []Token // Token stream from the lexer
+	pos    int     // Current position in the token stream
 }
 
+// NewParser creates a new parser with the given token stream
 func NewParser(tokens []Token) *Parser {
 	return &Parser{
 		tokens: tokens,
@@ -221,21 +258,26 @@ func NewParser(tokens []Token) *Parser {
 	}
 }
 
+// current returns the current token without advancing
 func (p *Parser) current() Token {
 	if p.pos >= len(p.tokens) {
-		return Token{Type: "EOF", Value: ""}
+		return Token{Type: "EOF", Value: ""} // Return EOF if we're past the end
 	}
 	return p.tokens[p.pos]
 }
 
+// next moves to the next token and returns it
 func (p *Parser) next() Token {
 	p.pos++
 	return p.current()
 }
 
+// Parse builds a complete AST from the token stream
+// This is the entry point to the parsing process
 func (p *Parser) Parse() *Program {
 	program := &Program{Body: []Node{}}
 
+	// Process tokens until EOF
 	for p.current().Type != "EOF" {
 		node := p.parseStatement()
 		if node != nil {
@@ -246,41 +288,46 @@ func (p *Parser) Parse() *Program {
 	return program
 }
 
+// parseStatement parses a single statement based on the current token
+// Different token types lead to different statement types
 func (p *Parser) parseStatement() Node {
 	token := p.current()
 
 	switch token.Type {
 	case "COMMENT":
-		return p.parseComment()
+		return p.parseComment() // Handle comments
 	case "FUNCTION":
-		return p.parseFunctionDeclaration()
+		return p.parseFunctionDeclaration() // Handle function declarations
 	case "RETURN":
-		return p.parseReturnStatement()
+		return p.parseReturnStatement() // Handle return statements
 	case "CONST", "LET", "VAR":
-		return p.parseVariableDeclaration()
+		return p.parseVariableDeclaration() // Handle variable declarations
 	case "SEMICOLON":
-		p.next()
+		p.next() // Skip standalone semicolons
 		return nil
 	default:
-		// Unexpected token, skip it
+		// Skip tokens we don't recognize in this context
 		p.next()
 		return nil
 	}
 }
 
+// parseComment creates a Comment node from a comment token
 func (p *Parser) parseComment() *Comment {
 	comment := &Comment{Text: p.current().Value}
 	p.next() // Skip comment token
 	return comment
 }
 
+// parseFunctionDeclaration parses a function declaration statement
+// Format: function name(param1, param2) { body }
 func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	p.next() // Skip function keyword
 
 	name := p.current().Value
 	p.next() // Skip identifier
 
-	// Parse parameters
+	// Parse parameters inside parentheses
 	params := []string{}
 	if p.current().Type == "LEFT_PAREN" {
 		p.next() // Skip (
@@ -293,7 +340,7 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 		p.next() // Skip )
 	}
 
-	// Parse function body
+	// Parse function body inside braces
 	body := []Node{}
 	if p.current().Type == "LEFT_BRACE" {
 		p.next() // Skip {
@@ -309,6 +356,8 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	return &FunctionDeclaration{Name: name, Params: params, Body: body}
 }
 
+// parseReturnStatement parses a return statement
+// Format: return expression;
 func (p *Parser) parseReturnStatement() *ReturnStatement {
 	p.next() // Skip return keyword
 
@@ -326,6 +375,8 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 	return &ReturnStatement{Argument: argument}
 }
 
+// parseVariableDeclaration parses a variable declaration
+// Format: const/let/var name = value;
 func (p *Parser) parseVariableDeclaration() *VariableDeclaration {
 	kind := p.current().Value
 	p.next() // Skip const/let/var
@@ -355,7 +406,8 @@ func (p *Parser) parseVariableDeclaration() *VariableDeclaration {
 	return &VariableDeclaration{Kind: kind, Name: name, Value: value}
 }
 
-// PrintAST pretty prints the AST
+// PrintAST recursively prints the AST in a human-readable format
+// It uses indentation to show the tree structure
 func PrintAST(node Node, indent string) {
 	switch n := node.(type) {
 	case *Program:
@@ -391,16 +443,22 @@ func PrintAST(node Node, indent string) {
 	}
 }
 
+// main is the entry point of our program
+// It reads the JS file, tokenizes it, builds the AST, and prints the result
 func main() {
+	// Read the JavaScript file
 	content := readFile("./script.js")
 
+	// Print the original content for reference
 	fmt.Println("File content:")
 	fmt.Println(content)
 	fmt.Println("\nTokenizing...")
 
+	// Tokenize the source code
 	lexer := NewLexer(content)
 	tokens := lexer.Tokenize()
 
+	// Print all identified tokens for debugging
 	fmt.Println("\nTokens:")
 	for _, token := range tokens {
 		if token.Type != "EOF" {
@@ -408,10 +466,12 @@ func main() {
 		}
 	}
 
+	// Parse the tokens into an AST
 	fmt.Println("\nParsing...")
 	parser := NewParser(tokens)
 	ast := parser.Parse()
 
+	// Print the structure of the AST
 	fmt.Println("\nAST:")
 	PrintAST(ast, "")
 }
