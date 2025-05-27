@@ -103,6 +103,8 @@ func (l *Lexer) Tokenize() []Token {
 				tokenType = "LET" // Block-scoped variable declaration
 			case "var":
 				tokenType = "VAR" // Function-scoped variable declaration
+			case "if":
+				tokenType = "IF" // If statement keyword
 			}
 
 			l.tokens = append(l.tokens, Token{Type: tokenType, Value: value})
@@ -136,10 +138,25 @@ func (l *Lexer) Tokenize() []Token {
 		case ';':
 			l.tokens = append(l.tokens, Token{Type: "SEMICOLON", Value: ";"})
 		case '=':
-			l.tokens = append(l.tokens, Token{Type: "EQUALS", Value: "="})
+			// Check for equality operator (==)
+			if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+				l.tokens = append(l.tokens, Token{Type: "EQUALITY", Value: "=="})
+				l.pos++ // Skip the next '=' since we're handling both at once
+			} else {
+				l.tokens = append(l.tokens, Token{Type: "EQUALS", Value: "="})
+			}
 		default:
+			// Handle numeric literals
+			if isDigit(char) {
+				start := l.pos
+				for l.pos < len(l.input) && isDigit(l.input[l.pos]) {
+					l.pos++
+				}
+				l.tokens = append(l.tokens, Token{Type: "NUMBER", Value: l.input[start:l.pos]})
+				continue
+			}
+
 			// Skip unknown characters
-			// This simple parser ignores characters it doesn't recognize
 			l.pos++
 			continue
 		}
@@ -243,6 +260,39 @@ func (c *Comment) Type() string {
 	return "Comment"
 }
 
+// IfStatement represents an if conditional statement
+// Example: if (condition) { ... }
+type IfStatement struct {
+	Test       Node   // The condition being tested
+	Consequent []Node // Statements to execute if condition is true
+}
+
+func (i *IfStatement) Type() string {
+	return "IfStatement"
+}
+
+// BinaryExpression represents expressions with two operands and an operator
+// Examples: a == b, x + y
+type BinaryExpression struct {
+	Left     Node   // Left operand
+	Operator string // Operator (e.g., "==", "+")
+	Right    Node   // Right operand
+}
+
+func (b *BinaryExpression) Type() string {
+	return "BinaryExpression"
+}
+
+// NumericLiteral represents numeric values in the code
+// Example: 1, 3.14
+type NumericLiteral struct {
+	Value string // The numeric value
+}
+
+func (n *NumericLiteral) Type() string {
+	return "NumericLiteral"
+}
+
 // Parser generates an AST from tokens
 // It implements a recursive descent parser pattern
 type Parser struct {
@@ -302,6 +352,8 @@ func (p *Parser) parseStatement() Node {
 		return p.parseReturnStatement() // Handle return statements
 	case "CONST", "LET", "VAR":
 		return p.parseVariableDeclaration() // Handle variable declarations
+	case "IF":
+		return p.parseIfStatement() // Handle if statements
 	case "SEMICOLON":
 		p.next() // Skip standalone semicolons
 		return nil
@@ -356,6 +408,99 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	return &FunctionDeclaration{Name: name, Params: params, Body: body}
 }
 
+// parseIfStatement parses an if statement
+// Format: if (condition) { body }
+func (p *Parser) parseIfStatement() *IfStatement {
+	p.next() // Skip the 'if' keyword
+
+	// Parse condition in parentheses
+	var test Node
+	if p.current().Type == "LEFT_PAREN" {
+		p.next() // Skip the opening parenthesis
+		test = p.parseExpression()
+
+		// Skip the closing parenthesis if present
+		if p.current().Type == "RIGHT_PAREN" {
+			p.next()
+		}
+	}
+
+	// Parse consequent (the "then" block)
+	consequent := []Node{}
+	if p.current().Type == "LEFT_BRACE" {
+		p.next() // Skip the opening brace
+		// Parse statements until we reach the closing brace
+		for p.current().Type != "RIGHT_BRACE" && p.current().Type != "EOF" {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				consequent = append(consequent, stmt)
+			}
+		}
+		if p.current().Type == "RIGHT_BRACE" {
+			p.next() // Skip the closing brace
+		}
+	}
+
+	return &IfStatement{
+		Test:       test,
+		Consequent: consequent,
+	}
+}
+
+// parseExpression parses expressions like comparisons and math operations
+func (p *Parser) parseExpression() Node {
+	// Parse the left side of the expression
+	left := p.parsePrimary()
+
+	// If followed by an operator, it's a binary expression
+	if isBinaryOperator(p.current().Type) {
+		operator := p.current().Value
+		p.next() // Skip the operator
+
+		// Parse the right side of the expression
+		right := p.parsePrimary()
+
+		return &BinaryExpression{
+			Left:     left,
+			Operator: operator,
+			Right:    right,
+		}
+	}
+
+	return left
+}
+
+// parsePrimary parses a primary expression (identifiers, literals)
+func (p *Parser) parsePrimary() Node {
+	token := p.current()
+
+	switch token.Type {
+	case "IDENTIFIER":
+		identifier := &Identifier{Name: token.Value}
+		p.next()
+		return identifier
+	case "NUMBER":
+		number := &NumericLiteral{Value: token.Value}
+		p.next()
+		return number
+	case "STRING":
+		// Remove quotes from string literal
+		rawValue := token.Value
+		cleanValue := strings.Trim(rawValue, "\"'")
+		value := &StringLiteral{Value: cleanValue}
+		p.next()
+		return value
+	default:
+		p.next() // Skip unhandled tokens
+		return nil
+	}
+}
+
+// isBinaryOperator checks if a token type represents a binary operator
+func isBinaryOperator(tokenType string) bool {
+	return tokenType == "EQUALITY" || tokenType == "EQUALS"
+}
+
 // parseReturnStatement parses a return statement
 // Format: return expression;
 func (p *Parser) parseReturnStatement() *ReturnStatement {
@@ -364,6 +509,12 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 	var argument Node
 	if p.current().Type == "IDENTIFIER" {
 		argument = &Identifier{Name: p.current().Value}
+		p.next()
+	} else if p.current().Type == "STRING" {
+		// Handle string literal return values
+		rawValue := p.current().Value
+		cleanValue := strings.Trim(rawValue, "\"'")
+		argument = &StringLiteral{Value: cleanValue}
 		p.next()
 	}
 
@@ -422,6 +573,20 @@ func PrintAST(node Node, indent string) {
 		for _, stmt := range n.Body {
 			PrintAST(stmt, indent+"    ")
 		}
+	case *IfStatement:
+		fmt.Printf("%sIfStatement:\n", indent)
+		fmt.Printf("%s  Condition:\n", indent)
+		PrintAST(n.Test, indent+"    ")
+		fmt.Printf("%s  Body:\n", indent)
+		for _, stmt := range n.Consequent {
+			PrintAST(stmt, indent+"    ")
+		}
+	case *BinaryExpression:
+		fmt.Printf("%sBinaryExpression: %s\n", indent, n.Operator)
+		fmt.Printf("%s  Left:\n", indent)
+		PrintAST(n.Left, indent+"    ")
+		fmt.Printf("%s  Right:\n", indent)
+		PrintAST(n.Right, indent+"    ")
 	case *ReturnStatement:
 		fmt.Printf("%sReturnStatement:\n", indent)
 		if n.Argument != nil {
@@ -431,6 +596,8 @@ func PrintAST(node Node, indent string) {
 		fmt.Printf("%sIdentifier: %s\n", indent, n.Name)
 	case *StringLiteral:
 		fmt.Printf("%sStringLiteral: %s\n", indent, n.Value)
+	case *NumericLiteral:
+		fmt.Printf("%sNumericLiteral: %s\n", indent, n.Value)
 	case *VariableDeclaration:
 		fmt.Printf("%sVariableDeclaration: %s %s\n", indent, n.Kind, n.Name)
 		if n.Value != nil {
