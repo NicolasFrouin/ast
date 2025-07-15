@@ -146,12 +146,37 @@ func (l *Lexer) Tokenize() []Token {
 			} else {
 				l.tokens = append(l.tokens, Token{Type: "EQUALS", Value: "="})
 			}
+		case '+':
+			l.tokens = append(l.tokens, Token{Type: "PLUS", Value: "+"})
+		case '-':
+			l.tokens = append(l.tokens, Token{Type: "MINUS", Value: "-"})
+		case '*':
+			l.tokens = append(l.tokens, Token{Type: "MULTIPLY", Value: "*"})
+		case '/':
+			// Check if it's a comment (already handled above) or division
+			if l.pos+1 < len(l.input) && l.input[l.pos+1] == '/' {
+				// This is a comment, skip it (already handled in comment section)
+				l.pos++
+				continue
+			} else {
+				l.tokens = append(l.tokens, Token{Type: "DIVIDE", Value: "/"})
+			}
+		case '%':
+			l.tokens = append(l.tokens, Token{Type: "MODULO", Value: "%"})
 		default:
-			// Handle numeric literals
+			// Handle numeric literals (including decimals)
 			if isDigit(char) {
 				start := l.pos
 				for l.pos < len(l.input) && isDigit(l.input[l.pos]) {
 					l.pos++
+				}
+				// Handle decimal part if present
+				if l.pos < len(l.input) && l.input[l.pos] == '.' {
+					l.pos++ // Skip the decimal point
+					// Consume digits after decimal point
+					for l.pos < len(l.input) && isDigit(l.input[l.pos]) {
+						l.pos++
+					}
 				}
 				l.tokens = append(l.tokens, Token{Type: "NUMBER", Value: l.input[start:l.pos]})
 				continue
@@ -499,7 +524,10 @@ func (p *Parser) parsePrimary() Node {
 
 // isBinaryOperator checks if a token type represents a binary operator
 func isBinaryOperator(tokenType string) bool {
-	return tokenType == "EQUALITY" || tokenType == "EQUALS"
+	return tokenType == "EQUALITY" || tokenType == "EQUALS" ||
+		tokenType == "PLUS" || tokenType == "MINUS" ||
+		tokenType == "MULTIPLY" || tokenType == "DIVIDE" ||
+		tokenType == "MODULO"
 }
 
 // parseReturnStatement parses a return statement
@@ -542,13 +570,10 @@ func (p *Parser) parseVariableDeclaration() *VariableDeclaration {
 	}
 
 	var value Node
-	if p.current().Type == "STRING" {
-		// Remove quotes from string literal
-		rawValue := p.current().Value
-		cleanValue := strings.Trim(rawValue, "\"'")
-		value = &StringLiteral{Value: cleanValue}
-		p.next()
-	}
+	// Always try to parse as an expression first, which handles all cases:
+	// - Simple literals (strings, numbers, identifiers)
+	// - Complex expressions (1 + 2, a * b, etc.)
+	value = p.parseExpression()
 
 	// Skip semicolon if present
 	if p.current().Type == "SEMICOLON" {
