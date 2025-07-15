@@ -42,6 +42,6 @@ function greetUser(name = "Guest", greeting = "Hello") {
 }
 
 function calculateArea(width, height = 10) {
-  return width;
+  return width * height;
 }
 

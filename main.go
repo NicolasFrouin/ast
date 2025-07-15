@@ -583,15 +583,10 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 	p.next() // Skip return keyword
 
 	var argument Node
-	if p.current().Type == "IDENTIFIER" {
-		argument = &Identifier{Name: p.current().Value}
-		p.next()
-	} else if p.current().Type == "STRING" {
-		// Handle string literal return values
-		rawValue := p.current().Value
-		cleanValue := strings.Trim(rawValue, "\"'")
-		argument = &StringLiteral{Value: cleanValue}
-		p.next()
+	// Parse any expression as the return value
+	// This handles: identifiers, literals, binary expressions, etc.
+	if p.current().Type != "SEMICOLON" && p.current().Type != "EOF" {
+		argument = p.parseExpression()
 	}
 
 	// Skip semicolon if present
