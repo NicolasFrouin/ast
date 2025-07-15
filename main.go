@@ -611,11 +611,10 @@ func (p *Parser) parseVariableDeclaration() *VariableDeclaration {
 		p.next()
 	}
 
-	var value Node
 	// Always try to parse as an expression first, which handles all cases:
 	// - Simple literals (strings, numbers, identifiers)
 	// - Complex expressions (1 + 2, a * b, etc.)
-	value = p.parseExpression()
+	value := p.parseExpression()
 
 	// Skip semicolon if present
 	if p.current().Type == "SEMICOLON" {
