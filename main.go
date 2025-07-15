@@ -138,6 +138,8 @@ func (l *Lexer) Tokenize() []Token {
 			l.tokens = append(l.tokens, Token{Type: "RIGHT_BRACE", Value: "}"})
 		case ';':
 			l.tokens = append(l.tokens, Token{Type: "SEMICOLON", Value: ";"})
+		case ',':
+			l.tokens = append(l.tokens, Token{Type: "COMMA", Value: ","})
 		case '=':
 			// Check for equality operator (==)
 			if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
@@ -239,15 +241,21 @@ func (p *Program) Type() string {
 }
 
 // FunctionDeclaration represents a JavaScript function definition
-// Example: function name(param1, param2) { ... }
+// Example: function name(param1, param2 = defaultValue) { ... }
 type FunctionDeclaration struct {
-	Name   string   // Function name
-	Params []string // Parameter names
-	Body   []Node   // Function body statements
+	Name   string      // Function name
+	Params []Parameter // Parameter names and default values
+	Body   []Node      // Function body statements
 }
 
 func (f *FunctionDeclaration) Type() string {
 	return "FunctionDeclaration"
+}
+
+// Parameter represents a function parameter with optional default value
+type Parameter struct {
+	Name         string // Parameter name
+	DefaultValue Node   // Default value (nil if no default)
 }
 
 // ReturnStatement represents a 'return' statement in JavaScript
@@ -414,7 +422,7 @@ func (p *Parser) parseComment() *Comment {
 }
 
 // parseFunctionDeclaration parses a function declaration statement
-// Format: function name(param1, param2) { body }
+// Format: function name(param1, param2 = defaultValue) { body }
 func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	p.next() // Skip function keyword
 
@@ -422,16 +430,37 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	p.next() // Skip identifier
 
 	// Parse parameters inside parentheses
-	params := []string{}
+	params := []Parameter{}
 	if p.current().Type == "LEFT_PAREN" {
 		p.next() // Skip (
-		for p.current().Type != "RIGHT_PAREN" {
+		for p.current().Type != "RIGHT_PAREN" && p.current().Type != "EOF" {
 			if p.current().Type == "IDENTIFIER" {
-				params = append(params, p.current().Value)
+				paramName := p.current().Value
+				p.next() // Skip parameter name
+
+				var defaultValue Node
+				// Check for default value assignment
+				if p.current().Type == "EQUALS" {
+					p.next() // Skip the equals sign
+					defaultValue = p.parseExpression()
+				}
+
+				params = append(params, Parameter{
+					Name:         paramName,
+					DefaultValue: defaultValue,
+				})
+
+				// Skip comma if present
+				if p.current().Type == "COMMA" {
+					p.next()
+				}
+			} else {
+				p.next() // Skip unexpected tokens
 			}
-			p.next()
 		}
-		p.next() // Skip )
+		if p.current().Type == "RIGHT_PAREN" {
+			p.next() // Skip )
+		}
 	}
 
 	// Parse function body inside braces
@@ -612,7 +641,15 @@ func PrintAST(node Node, indent string) {
 		}
 	case *FunctionDeclaration:
 		fmt.Printf("%sFunctionDeclaration: %s\n", indent, n.Name)
-		fmt.Printf("%s  Parameters: %v\n", indent, n.Params)
+		fmt.Printf("%s  Parameters:\n", indent)
+		for _, param := range n.Params {
+			if param.DefaultValue != nil {
+				fmt.Printf("%s    %s (default):\n", indent, param.Name)
+				PrintAST(param.DefaultValue, indent+"      ")
+			} else {
+				fmt.Printf("%s    %s\n", indent, param.Name)
+			}
+		}
 		fmt.Printf("%s  Body:\n", indent)
 		for _, stmt := range n.Body {
 			PrintAST(stmt, indent+"    ")

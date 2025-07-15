@@ -37,3 +37,11 @@ function compareNumbers(a, b) {
   }
 }
 
+function greetUser(name = "Guest", greeting = "Hello") {
+  return greeting;
+}
+
+function calculateArea(width, height = 10) {
+  return width;
+}
+
