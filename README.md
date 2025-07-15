@@ -9,7 +9,6 @@
 - [Core Concepts Discovered](#core-concepts-discovered)
 - [Architecture](#architecture)
 - [Implementation Details](#implementation-details)
-- [Examples](#examples)
 - [Usage](#usage)
 - [Supported JavaScript Features](#supported-javascript-features)
 - [What I Learned](#what-i-learned)
@@ -18,14 +17,16 @@
 
 This project is a JavaScript parser that builds an Abstract Syntax Tree (AST) from JavaScript source code, implemented entirely in Go. As a computer science student, I built this from scratch to understand how programming language parsers work under the hood.
 
-The parser can handle basic JavaScript constructs including:
+The parser can handle a comprehensive set of JavaScript constructs including:
 
-- Function declarations
-- Variable declarations (`const`, `let`, `var`)
-- If statements with conditions
-- String and numeric literals
+- Function declarations with default parameters
+- Variable declarations (`const`, `let`, `var`) with expressions
+- If statements with complex conditions
+- Mathematical operations (`+`, `-`, `*`, `/`, `%`)
+- Comparison operators (`==`, `>`, `<`, `>=`, `<=`)
+- String and numeric literals (including decimals)
 - Comments
-- Binary expressions (equality comparisons)
+- Complex expressions and return statements
 
 ## Learning Journey
 
@@ -85,8 +86,9 @@ The lexer is like a scanner that reads through the source code character by char
 2. **Comment recognition**: Handle `//` style comments
 3. **String literal parsing**: Handle both `"` and `'` quoted strings
 4. **Keyword identification**: Recognize reserved words like `function`, `return`, `if`
-5. **Operator recognition**: Handle `=`, `==`, parentheses, braces
-6. **Number parsing**: Recognize numeric literals
+5. **Operator recognition**: Handle `=`, `==`, `>`, `<`, `>=`, `<=`, `+`, `-`, `*`, `/`, `%`, parentheses, braces
+6. **Number parsing**: Recognize numeric literals including decimals like `3.14`
+7. **Mathematical expressions**: Parse complex arithmetic and comparison operations
 
 ### Parser - Building the Tree
 
@@ -97,8 +99,9 @@ The parser takes the stream of tokens and builds the actual tree structure. I le
 This is a top-down parsing technique where each grammar rule becomes a function. For example:
 
 - `parseStatement()` - handles any kind of statement
-- `parseFunctionDeclaration()` - specifically handles function declarations
-- `parseExpression()` - handles expressions like comparisons
+- `parseFunctionDeclaration()` - specifically handles function declarations with default parameters
+- `parseExpression()` - handles complex expressions like `a + b * c` or `age >= 18`
+- `parsePrimary()` - handles basic expressions like identifiers and literals
 
 #### Grammar Rules
 
@@ -106,8 +109,13 @@ I had to define how different JavaScript constructs should be parsed:
 
 ```ebnf
 FunctionDeclaration := "function" IDENTIFIER "(" ParameterList ")" "{" StatementList "}"
+ParameterList := Parameter ("," Parameter)*
+Parameter := IDENTIFIER ("=" Expression)?
 IfStatement := "if" "(" Expression ")" "{" StatementList "}"
 VariableDeclaration := ("const"|"let"|"var") IDENTIFIER "=" Expression ";"
+Expression := Primary (BinaryOperator Primary)?
+BinaryOperator := "==" | ">" | "<" | ">=" | "<=" | "+" | "-" | "*" | "/" | "%"
+Primary := IDENTIFIER | NUMBER | STRING
 ```
 
 ## Architecture
@@ -164,7 +172,11 @@ type Parser struct {
 }
 ```
 
-The parser maintains the current position in the token stream and builds the AST using recursive descent.
+The parser maintains the current position in the token stream and builds the AST using recursive descent. Key parsing functions include:
+
+- **Expression parsing**: Handles binary expressions with mathematical and comparison operators
+- **Default parameter parsing**: Supports function parameters with default values
+- **Complex return statements**: Can parse `return a + b * c;`
 
 ### 5. Pretty Printing
 
@@ -203,45 +215,34 @@ if char == '"' || char == '\'' {
 }
 ```
 
-### Parsing Strategy
+**Mathematical Operators**: Extended support for all basic arithmetic:
 
-I implemented a **recursive descent parser** where each grammar rule becomes a function:
-
-1. **Top-level parsing**: `Parse()` repeatedly calls `parseStatement()`
-2. **Statement dispatch**: `parseStatement()` looks at the current token type and calls the appropriate specific parser
-3. **Specific parsers**: Each construct has its own parsing function that knows the expected token sequence
-
-### Error Handling Philosophy
-
-For this learning project, I chose simple error handling:
-
-- File errors cause `panic()`
-- Unknown tokens are skipped
-- Malformed syntax results in `nil` nodes
-
-In a production parser, I would implement proper error recovery and meaningful error messages.
-
-## Examples
-
-### Input JavaScript File (`script.js`)
-
-```javascript
-// comment
-
-function funcName(funcArg) {
-  if (funcArg == 1) {
-    return 'Function argument is 1';
-  }
-
-  return funcArg;
-}
-
-const constVar = 'This is a constant variable';
+```go
+case '+':
+    l.tokens = append(l.tokens, Token{Type: "PLUS", Value: "+"})
+case '-':
+    l.tokens = append(l.tokens, Token{Type: "MINUS", Value: "-"})
+case '*':
+    l.tokens = append(l.tokens, Token{Type: "MULTIPLY", Value: "*"})
+case '/':
+    l.tokens = append(l.tokens, Token{Type: "DIVIDE", Value: "/"})
+case '%':
+    l.tokens = append(l.tokens, Token{Type: "MODULO", Value: "%"})
 ```
 
-### Generated Tokens
+**Comparison Operators**: Multi-character operator recognition:
 
-```text
+```go
+case '>':
+    if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+        l.tokens = append(l.tokens, Token{Type: "GREATER_EQUAL", Value: ">="})
+        l.pos++ // Skip the next '='
+    } else {
+        l.tokens = append(l.tokens, Token{Type: "GREATER_THAN", Value: ">"})
+    }
+```
+
+```txt
 COMMENT: // comment
 FUNCTION: function
 IDENTIFIER: funcName
@@ -490,12 +491,12 @@ func readFile(filename string) string {
         panic(err) // Simple for learning, but not idiomatic
     }
     defer file.Close()
-    
+
     content, err := io.ReadAll(file)
     if err != nil {
         panic(err)
     }
-    
+
     return string(content)
 }
 ```
@@ -514,7 +515,7 @@ I learned how Go's package system works:
 ```go
 import (
     "flag"      // Standard library
-    "fmt"       // Standard library  
+    "fmt"       // Standard library
     "io"        // Standard library
     "os"        // Standard library
     "strings"   // Standard library
