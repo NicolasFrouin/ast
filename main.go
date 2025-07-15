@@ -146,6 +146,22 @@ func (l *Lexer) Tokenize() []Token {
 			} else {
 				l.tokens = append(l.tokens, Token{Type: "EQUALS", Value: "="})
 			}
+		case '>':
+			// Check for greater than or equal (>=)
+			if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+				l.tokens = append(l.tokens, Token{Type: "GREATER_EQUAL", Value: ">="})
+				l.pos++ // Skip the next '=' since we're handling both at once
+			} else {
+				l.tokens = append(l.tokens, Token{Type: "GREATER_THAN", Value: ">"})
+			}
+		case '<':
+			// Check for less than or equal (<=)
+			if l.pos+1 < len(l.input) && l.input[l.pos+1] == '=' {
+				l.tokens = append(l.tokens, Token{Type: "LESS_EQUAL", Value: "<="})
+				l.pos++ // Skip the next '=' since we're handling both at once
+			} else {
+				l.tokens = append(l.tokens, Token{Type: "LESS_THAN", Value: "<"})
+			}
 		case '+':
 			l.tokens = append(l.tokens, Token{Type: "PLUS", Value: "+"})
 		case '-':
@@ -527,7 +543,9 @@ func isBinaryOperator(tokenType string) bool {
 	return tokenType == "EQUALITY" || tokenType == "EQUALS" ||
 		tokenType == "PLUS" || tokenType == "MINUS" ||
 		tokenType == "MULTIPLY" || tokenType == "DIVIDE" ||
-		tokenType == "MODULO"
+		tokenType == "MODULO" ||
+		tokenType == "GREATER_THAN" || tokenType == "LESS_THAN" ||
+		tokenType == "GREATER_EQUAL" || tokenType == "LESS_EQUAL"
 }
 
 // parseReturnStatement parses a return statement

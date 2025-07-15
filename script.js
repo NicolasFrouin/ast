@@ -15,3 +15,25 @@ const product = 3 * 4;
 const division = 15 / 3;
 const remainder = 10 % 3;
 
+function checkAge(age) {
+  if (age >= 18) {
+    return "Adult";
+  }
+  
+  if (age < 13) {
+    return "Child";
+  }
+  
+  return "Teenager";
+}
+
+function compareNumbers(a, b) {
+  if (a > b) {
+    return "First is greater";
+  }
+  
+  if (a <= b) {
+    return "First is less or equal";
+  }
+}
+
